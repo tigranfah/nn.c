@@ -2,13 +2,14 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <assert.h>
 
 const int CORPUS_SIZE = 160000;
 int corpus[CORPUS_SIZE];
 int tokens[CORPUS_SIZE];
 
 const int VOCAB_SIZE = 96;
-const char INT_TO_CHAR[96] = {
+const char INT_TO_CHAR[VOCAB_SIZE] = {
         '\n', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
         'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
@@ -73,35 +74,47 @@ float b2_grad[VOCAB_SIZE];
 // Function to generate Gaussian-distributed random numbers using Box-Muller transform
 float random_normal(float mean, float std) {
     // Generate two uniform random numbers in the range (0, 1)
-    double u1 = ((double) rand() + 1.0) / (RAND_MAX + 1.0);
-    double u2 = ((double) rand() + 1.0) / (RAND_MAX + 1.0);
+    float u1 = ((float) rand()) / RAND_MAX;
+    float u2 = ((float) rand()) / RAND_MAX;;
 
     // Apply Box-Muller transform
-    float z0 = sqrtf(-2.0f * log(u1)) * cos(2.0f * M_PI * u2);
+    float z0 = sqrtf(-2.0f * logf(u1)) * cosf(2.0f * M_PI * u2);
 
     // Scale and shift to the desired mean and standard deviation
     return z0 * std + mean;
 }
 
 void init_weight() {
+
+    FILE *weights_file = fopen("C_weight.txt", "w");
     // use xavier init for stable training without batch norm
     float mean = 0.0f, std = 1.0f;
+    fprintf(weights_file, "embeddings\n");
     for (int i = 0; i < VOCAB_SIZE; ++i) {
         for (int j = 0; j < EMBED_DIM; ++j) {
             embeddings[i][j] = random_normal(mean, sqrtf(2.0f / (VOCAB_SIZE + EMBED_DIM)));
+            fprintf(weights_file, "%f ", embeddings[i][j]);
         }
+        fprintf(weights_file, "\n");
     }
 
+    fprintf(weights_file, "W1\n");
     for (int i = 0; i < HIDDEN_DIM; ++i) {
         for (int j = 0; j < INPUT_DIM; ++j) {
             W1[i][j] = random_normal(mean, sqrtf(2.0f / (INPUT_DIM + HIDDEN_DIM)));
+            fprintf(weights_file, "%f ", W1[i][j]);
         }
+        fprintf(weights_file, "\n");
         b1[i] = 0;
     }
+
+    fprintf(weights_file, "W2\n");
     for (int i = 0; i < VOCAB_SIZE; ++i) {
         for (int j = 0; j < HIDDEN_DIM; ++j) {
             W2[i][j] = random_normal(mean, sqrtf(2.0f / (HIDDEN_DIM + VOCAB_SIZE)));
+            fprintf(weights_file, "%f ", W2[i][j]);
         }
+        fprintf(weights_file, "\n");
         b2[i] = 0;
     }
 }
@@ -223,7 +236,7 @@ void backwards() {
             float target = 0.0f;
             if (target_tokens[b] == i)
                 target = 1.0f;
-            assert(output_grad[b][i]);
+            assert(output_grad[b][i] == 0);
             output_grad[b][i] = 1.0f / B * (q[b][i] - target);
         }
     }
@@ -387,8 +400,11 @@ void train() {
         // prepare a batch
         // int random_indices[B] = {0, 25, 50, 75, 100};
         int random_indices[B];
-        for (int i = 0; i < B; ++i)
+        for (int i = 0; i < B; ++i) {
             random_indices[i] = min + rand() % (max - min + 1);
+            // printf("%d ", random_indices[i]);
+        }
+        // printf("\n");
         
         for (int i = 0; i < B; ++i) {
             for (int j = 0; j < CONTEXT_LENGTH; ++j) {

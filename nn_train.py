@@ -54,11 +54,35 @@ class NN(nn.Module):
         o = self.W2(h_act)
         return o
     
+    def _read_weights(self, _f, layer):
+        line = _f.readline().rstrip("\n")
+        print("reading weight", line)
+        weights_list = []
+        for _ in range(layer.weight.shape[0]):
+            line = _f.readline().rstrip(" \n")
+            weights_list.append([float(v) for v in line.split(" ")])
+        
+        return torch.tensor(weights_list)
+    
     def init_weights(self):
         # xavier init
-        self.embedding.weight = torch.normal(0, torch.sqrt(2 / sum(self.embeding.weight.shape)))
-        self.W1.weight = torch.normal(0, torch.sqrt(2 / sum(self.W1.weight.shape)))
-        self.W2.weight = torch.normal(0, torch.sqrt(2 / sum(self.W2.weight.shape)))
+        # self.embedding.weight = torch.normal(0, torch.sqrt(2 / sum(self.embeding.weight.shape)))
+        # self.W1.weight = torch.normal(0, torch.sqrt(2 / sum(self.W1.weight.shape)))
+        # self.W2.weight = torch.normal(0, torch.sqrt(2 / sum(self.W2.weight.shape)))
+        with torch.no_grad():
+            with open("C_weight.txt", "r") as _f:
+                self.embeding.weight = nn.Parameter(self._read_weights(_f, self.embeding))
+                self.W1.weight = nn.Parameter(self._read_weights(_f, self.W1))
+                self.W1.bias = nn.Parameter(torch.zeros_like(self.W1.bias))
+                self.W2.weight = nn.Parameter(self._read_weights(_f, self.W2))
+                self.W2.bias = nn.Parameter(torch.zeros_like(self.W2.bias))
+
+        # print("embeddings")
+        # print(self.embeding.weight)
+        # print("W1")
+        # print(self.W1.weight)
+        # print("W2")
+        # print(self.W2.weight)
 
 
 LR = 1e-1
@@ -75,10 +99,7 @@ model = NN(
     input_dim=INPUT_DIM,
     hidden_dim=HIDDEN_DIM
 )
-# print("W1", model.W1.weight, model.W1.bias)
-# print("W2", model.W2.weight, model.W2.bias)
-# print("emb", model.embeding.weight)
-# model.init_weights()
+model.init_weights()
 optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.0)
 log_file = open("pytorch.log", "w")
 
