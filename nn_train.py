@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import time
+from pprint import pprint
 
 torch.random.manual_seed(42)
 
@@ -54,15 +55,15 @@ class NN(nn.Module):
         return o
     
     def init_weights(self):
-        torch.nn.init.xavier_normal_(self.embeding.weight, gain=2.0)
-        torch.nn.init.xavier_normal_(self.W1.weight, gain=2.0)
-        # torch.nn.init.zeros_(self.W1.bias)
-        torch.nn.init.xavier_normal_(self.W2.weight, gain=2.0)
-        # torch.nn.init.zeros_(self.W2.bias)
+        # xavier init
+        self.embedding.weight = torch.normal(0, torch.sqrt(2 / sum(self.embeding.weight.shape)))
+        self.W1.weight = torch.normal(0, torch.sqrt(2 / sum(self.W1.weight.shape)))
+        self.W2.weight = torch.normal(0, torch.sqrt(2 / sum(self.W2.weight.shape)))
 
 
 LR = 1e-1
-B = 64
+MAX_STEPS = 1000
+B = 128
 EMBED_DIM = 64
 CONTEXT_LENGTH = 16
 HIDDEN_DIM = 64
@@ -79,17 +80,19 @@ model = NN(
 # print("emb", model.embeding.weight)
 # model.init_weights()
 optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.0)
+log_file = open("pytorch.log", "w")
 
-MAX_STEPS = 300
 start_time = time.time()
 for i in range(MAX_STEPS):
     indices = torch.randint(0, len(all_tokens) - (CONTEXT_LENGTH + 1), (B, ))
+    # indices = torch.tensor([0, 25, 50, 75, 100])
     input_tokens, target_tokens = [], []
     for ind in indices:
         input_tokens.append(all_tokens[ind: ind + CONTEXT_LENGTH])
         target_tokens.append(all_tokens[ind + CONTEXT_LENGTH])
 
-
+    # pprint(input_tokens)
+    # pprint(target_tokens)
     input_tokens = torch.tensor(input_tokens)
     target_tokens = torch.tensor(target_tokens)
     # print(input_tokens, target_tokens)
@@ -97,7 +100,9 @@ for i in range(MAX_STEPS):
     optimizer.zero_grad()
     o = model(input_tokens)
     loss = F.cross_entropy(o, target_tokens)
-    print(i + 1, loss)
+    line = f"step {i + 1}, loss {loss.item():.6f}"
+    pprint(line)
+    log_file.write(line + "\n")
     loss.backward()
     optimizer.step()
     # break

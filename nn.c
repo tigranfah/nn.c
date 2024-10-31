@@ -26,7 +26,7 @@ int get_token_id(char token) {
 const char BOS_TOKEN = '$', EOS_TOKEN = '@', PAD_TOKEN = '#';
 int BOS_TOKEN_ID, EOS_TOKEN_ID, PAD_TOKEN_ID;
 
-const float lr = 1e-2;
+const float lr = 1e-1;
 const int MAX_STEPS = 1000;
 const int B = 128;
 const int EMBED_DIM = 64;
@@ -73,11 +73,11 @@ float b2_grad[VOCAB_SIZE];
 // Function to generate Gaussian-distributed random numbers using Box-Muller transform
 float random_normal(float mean, float std) {
     // Generate two uniform random numbers in the range (0, 1)
-    float u1 = (rand() + 1.0) / (RAND_MAX + 1.0);
-    float u2 = (rand() + 1.0) / (RAND_MAX + 1.0);
+    double u1 = ((double) rand() + 1.0) / (RAND_MAX + 1.0);
+    double u2 = ((double) rand() + 1.0) / (RAND_MAX + 1.0);
 
     // Apply Box-Muller transform
-    float z0 = sqrtf(-2.0f * logf(u1)) * cos(2.0f * M_PI * u2);
+    float z0 = sqrtf(-2.0f * log(u1)) * cos(2.0f * M_PI * u2);
 
     // Scale and shift to the desired mean and standard deviation
     return z0 * std + mean;
@@ -112,11 +112,11 @@ float relu(float x) {
     return 0;
 }
 
-inline float sigmoid(float x) {
+float sigmoid(float x) {
     return 1 / (1 + expf(-x));
 }
 
-inline float sigmoid_grad(float x) {
+float sigmoid_grad(float x) {
     return sigmoid(x) * (1 - sigmoid(x));
 }
 
@@ -130,6 +130,7 @@ void softargmax() {
             }
         }
 
+        // use the log sum exp 'trick'
         float log_sum_exp = 0.0f;
         for (int i = 0; i < VOCAB_SIZE; ++i) {
             log_sum_exp += expf(output[b][i] - max_output);
@@ -222,16 +223,19 @@ void backwards() {
             float target = 0.0f;
             if (target_tokens[b] == i)
                 target = 1.0f;
+            assert(output_grad[b][i]);
             output_grad[b][i] = 1.0f / B * (q[b][i] - target);
         }
     }
 
     for (int i = 0; i < VOCAB_SIZE; ++i) {
         for (int j = 0; j < HIDDEN_DIM; ++j) {
+            assert(W2_grad[i][j] == 0);
             for (int b = 0; b < B; ++b) {
                 W2_grad[i][j] += output_grad[b][i] * hidden[b][j];
             }
         }
+        assert(b2_grad[i] == 0);
         for (int b = 0; b < B; ++b) {
             b2_grad[i] += output_grad[b][i];
         }
@@ -239,6 +243,7 @@ void backwards() {
 
     for (int b = 0; b < B; ++b) {
         for (int i = 0; i < HIDDEN_DIM; ++i) {
+            assert(hidden_act_grad[b][i] == 0);
             for (int j = 0; j < VOCAB_SIZE; ++j) {
 //                if (hidden_relu[b][i] <= 0)
 //                    break;
@@ -248,6 +253,7 @@ void backwards() {
 //              h_act_grad_h = sigmoid(h(x)) * h(x)
                 hidden_act_grad[b][i] += output_grad[b][j] * W2[j][i];
             }
+            assert(hidden_grad[b][i] == 0);
             hidden_grad[b][i] = hidden_act_grad[b][i] * sigmoid_grad(hidden[b][i]);
 //            printf("%f ", hidden_grad[b][i]);
         }
@@ -256,10 +262,12 @@ void backwards() {
 
     for (int i = 0; i < HIDDEN_DIM; ++i) {
         for (int j = 0; j < INPUT_DIM; ++j) {
+            assert(W1_grad[i][j] == 0);
             for (int b = 0; b < B; ++b) {
                 W1_grad[i][j] += hidden_grad[b][i] * input[b][j];
             }
         }
+        assert(b1_grad[i] == 0);
         for (int b = 0; b < B; ++b) {
             b1_grad[i] += hidden_grad[b][i];
         }
@@ -307,10 +315,11 @@ void update() {
 }
 
 void zero_grad() {
-    for (int i = 0; i < CONTEXT_LENGTH; ++i) {
+    for (int i = 0; i < VOCAB_SIZE; ++i) {
         for (int j = 0; j < EMBED_DIM; ++j)
             embeddings_grad[i][j] = 0;
     }
+
     for (int b = 0; b < B; ++b) {
         for (int i = 0; i < INPUT_DIM; ++i)
             input_grad[b][i] = 0;
@@ -373,36 +382,46 @@ void tokenize() {
 void train() {
     int min = 0, max = CORPUS_SIZE - B * CONTEXT_LENGTH;
     int step = 1;
+    FILE *log_file = fopen("nn.c.log", "w");
     while (step < MAX_STEPS) {
         // prepare a batch
-        int cur_index = min + rand() % (max - min + 1);
-        for (int b = 0; b < B; ++b) {
-            for (int i = 0; i < CONTEXT_LENGTH; ++i) {
-                input_tokens[b][i] = tokens[cur_index];
-                cur_index++;
+        // int random_indices[B] = {0, 25, 50, 75, 100};
+        int random_indices[B];
+        for (int i = 0; i < B; ++i)
+            random_indices[i] = min + rand() % (max - min + 1);
+        
+        for (int i = 0; i < B; ++i) {
+            for (int j = 0; j < CONTEXT_LENGTH; ++j) {
+                input_tokens[i][j] = tokens[random_indices[i] + j];
+                // printf("%d ", input_tokens[i][j]);
             }
-            target_tokens[b] = tokens[cur_index];
+            // printf("\n");
+        }
+        for (int i = 0; i < B; ++i) {
+            target_tokens[i] = tokens[random_indices[i] + CONTEXT_LENGTH];
+            // printf("%d ", target_tokens[i]);
         }
 
         forward();
 //        printf("step: %d\n", step);
-        printf("step: %d, loss: %f\n", step, cross_entropy());
+        float loss = cross_entropy();
+        fprintf(log_file, "step: %d, loss: %f\n", step, loss);
+        printf("step: %d, loss: %f\n", step, loss);
         backwards();
         update();
         zero_grad();
         step++;
-//        break;
+        // break;
     }
+    fclose(log_file);
 }
 
 int main(int argc, char *argv[]) {
 //    srand(time(NULL));
     srand(42);
-    // Define a file pointer
-    FILE *file;
 
     // Open the file in "read" mode
-    file = fopen("dataset.txt", "r");
+    FILE *file = fopen("dataset.txt", "r");
 
     // Check if the file was opened successfully
     if (file == NULL) {
