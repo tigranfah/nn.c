@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import time
 from pprint import pprint
 
+torch.set_printoptions(precision=6, sci_mode=False)
+
 torch.random.manual_seed(42)
 
 INT_TO_CHAR = [
@@ -47,12 +49,19 @@ class NN(nn.Module):
         self.W2 = nn.Linear(hidden_dim, vocab_size, dtype=torch.float32)
 
     def forward(self, input_tokens):
-        x = self.embeding(input_tokens).view(input_tokens.shape[0], -1)
-        h = self.W1(x)
+        self.x = self.embeding(input_tokens).view(input_tokens.shape[0], -1)
+        self.h = self.W1(self.x)
         # h = self.batch_norm(h)
-        h_act = F.sigmoid(h)
-        o = self.W2(h_act)
-        return o
+        self.h_act = F.sigmoid(self.h)
+        # print(h_act)
+        # print(self.W2.weight)
+        self.o = self.W2(self.h_act)
+        # print(o)
+        self.x.retain_grad()
+        self.h.retain_grad()
+        self.h_act.retain_grad()
+        self.o.retain_grad()
+        return self.o
     
     def _read_weights(self, _f, layer):
         line = _f.readline().rstrip("\n")
@@ -104,9 +113,9 @@ optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.0)
 log_file = open("pytorch.log", "w")
 
 start_time = time.time()
-for i in range(MAX_STEPS):
-    indices = torch.randint(0, len(all_tokens) - (CONTEXT_LENGTH + 1), (B, ))
-    # indices = torch.tensor([0, 25, 50, 75, 100])
+for step in range(1, MAX_STEPS + 1):
+    # indices = torch.randint(0, len(all_tokens) - (CONTEXT_LENGTH + 1), (B, ))
+    indices = torch.tensor([0, 25, 50, 75, 100])
     input_tokens, target_tokens = [], []
     for ind in indices:
         input_tokens.append(all_tokens[ind: ind + CONTEXT_LENGTH])
@@ -121,11 +130,13 @@ for i in range(MAX_STEPS):
     optimizer.zero_grad()
     o = model(input_tokens)
     loss = F.cross_entropy(o, target_tokens)
-    line = f"step {i + 1}, loss {loss.item():.6f}"
-    pprint(line)
+    line = f"step {step}, loss {loss.item():.6f}"
+    print(line)
     log_file.write(line + "\n")
     loss.backward()
     optimizer.step()
-    # break
+    # print(model.W2.weight.grad)
+    if step == 2:
+        break
 
 print(f"Time taken: {time.time() - start_time} seconds")

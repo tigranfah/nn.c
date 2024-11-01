@@ -70,7 +70,7 @@ q1 = F.softmax(o1, dim=-1)
 
 o_grad = 1 / B * (q1 - y)
 # print("o_grad", o_grad)
-W2_grad = o_grad.T @ h1
+W2_grad = o_grad.T @ h1_act
 b2_grad = o_grad.sum(dim=0)
 # print(b2_grad)
 

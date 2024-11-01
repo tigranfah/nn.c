@@ -2,3 +2,4 @@
 .vscode/
 out
 nn.dSYM
+.ipynb_checkpoints/

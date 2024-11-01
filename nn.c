@@ -4,11 +4,21 @@
 #include <math.h>
 #include <assert.h>
 
-const int CORPUS_SIZE = 160000;
+#define M_PI 3.14159265358979323846
+
+#define CORPUS_SIZE 160000
+#define VOCAB_SIZE 96
+#define B 5
+#define EMBED_DIM 64
+#define CONTEXT_LENGTH 16
+#define HIDDEN_DIM 64
+#define INPUT_DIM CONTEXT_LENGTH * EMBED_DIM
+const float lr = 1e-1;
+const int MAX_STEPS = 1000;
+
 int corpus[CORPUS_SIZE];
 int tokens[CORPUS_SIZE];
 
-const int VOCAB_SIZE = 96;
 const char INT_TO_CHAR[VOCAB_SIZE] = {
         '\n', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
@@ -26,14 +36,6 @@ int get_token_id(char token) {
 
 const char BOS_TOKEN = '$', EOS_TOKEN = '@', PAD_TOKEN = '#';
 int BOS_TOKEN_ID, EOS_TOKEN_ID, PAD_TOKEN_ID;
-
-const float lr = 1e-1;
-const int MAX_STEPS = 1000;
-const int B = 128;
-const int EMBED_DIM = 64;
-const int CONTEXT_LENGTH = 16;
-const int HIDDEN_DIM = 64;
-const int INPUT_DIM = CONTEXT_LENGTH * EMBED_DIM;
 
 int input_tokens[B][CONTEXT_LENGTH];
 int target_tokens[B];
@@ -126,7 +128,8 @@ float relu(float x) {
 }
 
 float sigmoid(float x) {
-    return 1 / (1 + expf(-x));
+    // return 1 / (1 + expf(-x));
+    return expf(x) / (1 + expf(x));
 }
 
 float sigmoid_grad(float x) {
@@ -185,12 +188,12 @@ void forward() {
                 input[b][EMBED_DIM * i + j] = embeddings[input_tokens[b][i]][j];
         }
     }
-//    for (int b = 0; b < B; ++b) {
-//        for (int i = 0; i < CONTEXT_LENGTH * EMBED_DIM; ++i) {
-//            printf("%f ", input[b][i]);
-//        }
-//        printf("\n");
-//    }
+    // for (int b = 0; b < B; ++b) {
+    //     for (int i = 0; i < 6; ++i) {
+    //         printf("%f ", input[b][i]);
+    //     }
+    //     printf("\n");
+    // }
     for (int b = 0; b < B; ++b) {
         for (int i = 0; i < HIDDEN_DIM; ++i) {
             // reset hidden activations
@@ -199,24 +202,32 @@ void forward() {
                 hidden[b][i] += W1[i][j] * input[b][j];
             hidden[b][i] += b1[i];
 
-//            printf("%f ", hidden[b][i]);
+            // printf("%f ", hidden[b][i]);
 
             // apply activation function
             hidden_act[b][i] = sigmoid(hidden[b][i]);
+            // printf("%f ", hidden_act[b][i]);
         }
-//        printf("\n");
+        // printf("\n");
     }
+    // for (int i = 0; i < VOCAB_SIZE; ++i) {
+    //     for (int j = 0; j < 6; ++j) {
+    //         printf("%f ", W2[i][j]);
+    //     }
+    //     printf("\n");
+    // }
 
     for (int b = 0; b < B; ++b) {
         for (int i = 0; i < VOCAB_SIZE; ++i) {
-            // reset output activations
+            // reset output logits
             output[b][i] = 0;
             for (int j = 0; j < HIDDEN_DIM; ++j)
                 output[b][i] += W2[i][j] * hidden_act[b][j];
             output[b][i] += b2[i];
-//            printf("%f ", output[b][i]);
+            // if (i < 6)
+            // printf("%f ", output[b][i]);
         }
-//        printf("\n");
+        // printf("\n");
     }
     softargmax();
 }
@@ -238,14 +249,16 @@ void backwards() {
                 target = 1.0f;
             assert(output_grad[b][i] == 0);
             output_grad[b][i] = 1.0f / B * (q[b][i] - target);
+            // printf("%f ", output_grad[b][i]);
         }
+        // printf("\n");
     }
 
     for (int i = 0; i < VOCAB_SIZE; ++i) {
         for (int j = 0; j < HIDDEN_DIM; ++j) {
             assert(W2_grad[i][j] == 0);
             for (int b = 0; b < B; ++b) {
-                W2_grad[i][j] += output_grad[b][i] * hidden[b][j];
+                W2_grad[i][j] += output_grad[b][i] * hidden_act[b][j];
             }
         }
         assert(b2_grad[i] == 0);
@@ -253,6 +266,17 @@ void backwards() {
             b2_grad[i] += output_grad[b][i];
         }
     }
+
+    // for (int i = 0; i < VOCAB_SIZE; ++i) {
+    //     for (int j = 0; j < 6; ++j) {
+    //         printf("%f ", b2_grad[i][j]);
+    //     }
+    //     printf("\n");
+    // }
+    // for (int j = 0; j < VOCAB_SIZE; ++j) {
+    //     printf("%f ", b2_grad[j]);
+    // }
+    // printf("\n");
 
     for (int b = 0; b < B; ++b) {
         for (int i = 0; i < HIDDEN_DIM; ++i) {
@@ -315,14 +339,22 @@ void update() {
     }
 
     for (int i = 0; i < HIDDEN_DIM; ++i) {
-        for (int j = 0; j < INPUT_DIM; ++j)
+        for (int j = 0; j < INPUT_DIM; ++j) {
             W1[i][j] -= lr * W1_grad[i][j];
+            // if (j < 6)
+            //     printf("%f ", W1_grad[i][j]);
+        }
+        // printf("\n");
         b1[i] -= lr * b1_grad[i];
     }
 
     for (int i = 0; i < VOCAB_SIZE; ++i) {
-        for (int j = 0; j < HIDDEN_DIM; ++j)
+        for (int j = 0; j < HIDDEN_DIM; ++j) {
             W2[i][j] -= lr * W2_grad[i][j];
+            // if (j < 6)
+            //     printf("%f ", W2_grad[i][j]);
+        }
+        // printf("\n");
         b2[i] -= lr * b2_grad[i];
     }
 }
@@ -394,16 +426,17 @@ void tokenize() {
 
 void train() {
     int min = 0, max = CORPUS_SIZE - B * CONTEXT_LENGTH;
-    int step = 1;
+    int step = 0;
     FILE *log_file = fopen("nn.c.log", "w");
     while (step < MAX_STEPS) {
+        step++;
         // prepare a batch
-        // int random_indices[B] = {0, 25, 50, 75, 100};
-        int random_indices[B];
-        for (int i = 0; i < B; ++i) {
-            random_indices[i] = min + rand() % (max - min + 1);
+        int random_indices[B] = {0, 25, 50, 75, 100};
+        // int random_indices[B];
+        // for (int i = 0; i < B; ++i) {
+        //     random_indices[i] = min + rand() % (max - min + 1);
             // printf("%d ", random_indices[i]);
-        }
+        // }
         // printf("\n");
         
         for (int i = 0; i < B; ++i) {
@@ -418,6 +451,7 @@ void train() {
             // printf("%d ", target_tokens[i]);
         }
 
+        zero_grad();
         forward();
 //        printf("step: %d\n", step);
         float loss = cross_entropy();
@@ -425,9 +459,12 @@ void train() {
         printf("step: %d, loss: %f\n", step, loss);
         backwards();
         update();
-        zero_grad();
-        step++;
-        // break;
+        // for (int i = 0; i < 6; ++i) {
+        //     printf("%f ", b2[i]);
+        // }
+        // printf("\n");
+        if (step == 2)
+            break;
     }
     fclose(log_file);
 }
