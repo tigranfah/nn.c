@@ -14,7 +14,7 @@
 #define HIDDEN_DIM 64
 #define INPUT_DIM CONTEXT_LENGTH * EMBED_DIM
 const float lr = 1e-1;
-const int MAX_STEPS = 1000;
+const int MAX_STEPS = 10000;
 
 int corpus[CORPUS_SIZE];
 int tokens[CORPUS_SIZE];
@@ -465,8 +465,8 @@ void train() {
 
         float diff = ((float) (clock() - last_flops_count_time)) / CLOCKS_PER_SEC;
         float flops = 1.0f / diff * get_flop_count();
-        fprintf(log_file, "step: %d, loss: %.4f, flops: %.2f\n", step, loss, flops);
-        printf("step: %d, loss: %.4f, flops %.2f\n", step, loss, flops);
+        fprintf(log_file, "step: %d loss: %.4f flops: %.2f\n", step, loss, flops);
+        printf("step: %d loss: %.4f flops %.2f\n", step, loss, flops);
         last_flops_count_time = clock();
         // for (int i = 0; i < 6; ++i) {
         //     printf("%f ", b2[i]);

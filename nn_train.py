@@ -95,7 +95,7 @@ class NN(nn.Module):
 
 
 LR = 1e-1
-MAX_STEPS = 1000
+MAX_STEPS = 10000
 B = 128
 EMBED_DIM = 64
 CONTEXT_LENGTH = 16
@@ -144,7 +144,7 @@ for step in range(1, MAX_STEPS + 1):
     diff = (time.time() - last_flops_count_time) / 1000
     flops = 1 / diff * get_flop_count()
     last_flop_count_time = time.time()
-    line = f"step: {step}, loss: {loss.item():.4f}, flops: {flops:.2f}"
+    line = f"step: {step} loss: {loss.item():.4f} flops: {flops:.2f}"
     print(line)
     log_file.write(line + "\n")
     # print(model.W2.weight.grad)
