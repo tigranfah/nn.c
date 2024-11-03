@@ -8,7 +8,7 @@
 
 #define CORPUS_SIZE 160000
 #define VOCAB_SIZE 96
-#define B 5
+#define B 128
 #define EMBED_DIM 64
 #define CONTEXT_LENGTH 16
 #define HIDDEN_DIM 64
@@ -32,6 +32,10 @@ int get_token_id(char token) {
             return i;
     }
     return 0;
+}
+
+float get_flop_count() {
+    return 6 * (EMBED_DIM * VOCAB_SIZE + (INPUT_DIM + 1) * HIDDEN_DIM + (HIDDEN_DIM + 1) * VOCAB_SIZE);
 }
 
 const char BOS_TOKEN = '$', EOS_TOKEN = '@', PAD_TOKEN = '#';
@@ -428,15 +432,16 @@ void train() {
     int min = 0, max = CORPUS_SIZE - B * CONTEXT_LENGTH;
     int step = 0;
     FILE *log_file = fopen("nn.c.log", "w");
+    clock_t last_flops_count_time = clock();
     while (step < MAX_STEPS) {
         step++;
         // prepare a batch
-        int random_indices[B] = {0, 25, 50, 75, 100};
-        // int random_indices[B];
-        // for (int i = 0; i < B; ++i) {
-        //     random_indices[i] = min + rand() % (max - min + 1);
+        // int random_indices[B] = {0, 25, 50, 75, 100};
+        int random_indices[B];
+        for (int i = 0; i < B; ++i) {
+            random_indices[i] = min + rand() % (max - min + 1);
             // printf("%d ", random_indices[i]);
-        // }
+        }
         // printf("\n");
         
         for (int i = 0; i < B; ++i) {
@@ -455,16 +460,19 @@ void train() {
         forward();
 //        printf("step: %d\n", step);
         float loss = cross_entropy();
-        fprintf(log_file, "step: %d, loss: %f\n", step, loss);
-        printf("step: %d, loss: %f\n", step, loss);
         backwards();
         update();
+
+        float diff = ((float) (clock() - last_flops_count_time)) / CLOCKS_PER_SEC;
+        float flops = 1.0f / diff * get_flop_count();
+        fprintf(log_file, "step: %d, loss: %.4f, flops: %.2f\n", step, loss, flops);
+        printf("step: %d, loss: %.4f, flops %.2f\n", step, loss, flops);
+        last_flops_count_time = clock();
         // for (int i = 0; i < 6; ++i) {
         //     printf("%f ", b2[i]);
         // }
         // printf("\n");
-        if (step == 2)
-            break;
+        // break;
     }
     fclose(log_file);
 }
@@ -507,7 +515,7 @@ int main(int argc, char *argv[]) {
     end = time(NULL);
 
     // Calculate the difference in seconds
-    double elapsed = difftime(end, start);
+    float elapsed = difftime(end, start);
     printf("Time taken: %.2f seconds\n", elapsed);
     return 0;
 }

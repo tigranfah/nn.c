@@ -112,10 +112,17 @@ model.init_weights()
 optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.0)
 log_file = open("pytorch.log", "w")
 
+
+def get_flop_count():
+    """Calculates the floating point operations"""
+    return 6 * (EMBED_DIM * VOCAB_SIZE + (INPUT_DIM + 1) * HIDDEN_DIM + (HIDDEN_DIM + 1) * VOCAB_SIZE)
+
+
 start_time = time.time()
+last_flops_count_time = time.time()
 for step in range(1, MAX_STEPS + 1):
-    # indices = torch.randint(0, len(all_tokens) - (CONTEXT_LENGTH + 1), (B, ))
-    indices = torch.tensor([0, 25, 50, 75, 100])
+    indices = torch.randint(0, len(all_tokens) - (CONTEXT_LENGTH + 1), (B, ))
+    # indices = torch.tensor([0, 25, 50, 75, 100])
     input_tokens, target_tokens = [], []
     for ind in indices:
         input_tokens.append(all_tokens[ind: ind + CONTEXT_LENGTH])
@@ -130,13 +137,17 @@ for step in range(1, MAX_STEPS + 1):
     optimizer.zero_grad()
     o = model(input_tokens)
     loss = F.cross_entropy(o, target_tokens)
-    line = f"step {step}, loss {loss.item():.6f}"
-    print(line)
-    log_file.write(line + "\n")
     loss.backward()
     optimizer.step()
+
+    # calculate the floating point operations per seconds
+    diff = (time.time() - last_flops_count_time) / 1000
+    flops = 1 / diff * get_flop_count()
+    last_flop_count_time = time.time()
+    line = f"step: {step}, loss: {loss.item():.4f}, flops: {flops:.2f}"
+    print(line)
+    log_file.write(line + "\n")
     # print(model.W2.weight.grad)
-    if step == 2:
-        break
+    # break
 
 print(f"Time taken: {time.time() - start_time} seconds")
